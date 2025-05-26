@@ -1,122 +1,232 @@
 /* main.c */
 #include "main.h"
 
-// Helper function to zero out a block of memory.
-// It uses memset, which is the standard and most efficient way to fill a memory block with a constant byte.
-// Parameters:
-//   ptr: A pointer to the block of memory to fill.
-//   size: The number of bytes to be set to zero.
 void zero(uint8_t *ptr, uint16_t size)
 {
-    // Use assert to ensure the pointer is not NULL. This helps catch programming errors early.
-    assert(ptr != NULL);
-    // memset sets the first 'size' bytes of the block of memory pointed to by 'ptr' to zero.
+    // Pre-condition check: Ensure the pointer is valid before attempting to dereference.
+    // `assert` is used for debugging; it will terminate the program if the condition is false.
+    assert(ptr != NULL && "Error: Attempted to zero NULL memory block.");
+
+    // Use `memset` for efficient memory zeroing. `memset` is a standard library function
+    // optimized for setting a block of memory to a specified byte value.
     memset(ptr, 0, size);
 }
 
-// Function to create a new Node in the tree structure.
-// Parameters:
-//   parent: A pointer to the parent Node under which the new node will be created.
-//   path: A pointer to a character array (string) representing the path for the new node.
-// Returns:
-//   A pointer to the newly created Node, or NULL if memory allocation fails.
 Node *create_node(Node *parent, int8_t *path)
 {
-    Node *node;         // Pointer to the new Node
-    uint16_t node_size; // Size of the Node structure
+    Node *node;         // Pointer to hold the address of the newly allocated Node.
+    uint16_t node_size; // Stores the calculated size of the Node structure.
 
-    // Assert that the parent pointer is not NULL. A new node must have a parent.
-    assert(parent);
+    // Pre-condition check: A parent node is required to create a new child node.
+    assert(parent != NULL && "Error: Parent node cannot be NULL when creating a new node.");
 
-    // Calculate the size of the Node structure for memory allocation.
+    // Determine the exact size required for a `Node` structure.
     node_size = sizeof(struct s_node);
-    // Allocate memory for the new Node.
+    // Allocate memory from the heap for the new Node.
     node = (Node *)malloc(node_size);
-    // Check if malloc failed (returned NULL).
+
+    // Error handling: Check if memory allocation was successful.
     if (node == NULL)
     {
-        // Print an error message to stderr if memory allocation fails.
-        perror("Failed to allocate memory for node");
-        return NULL; // Return NULL to indicate failure.
+        // Print a system-specific error message to standard error stream.
+        perror("ERROR: Failed to allocate memory for a new Node");
+        return NULL; // Return NULL to indicate allocation failure.
     }
 
-    // Zero out the newly allocated memory for the Node structure.
-    // We cast 'node' (which is Node*) to 'uint8_t*' because 'zero' expects a byte pointer.
+    // Initialize the allocated memory to all zeros. This is crucial to prevent
+    // undefined behavior from uninitialized pointers or data.
     zero((uint8_t *)node, node_size);
 
-    // Print information about the newly created node.
-    // Using %u for unsigned integer (node_size) and %p for pointer addresses.
-    printf("Node structure size: %u bytes\n", node_size);
-    printf("Address of new Node in memory: %p\n", (void *)node); // Cast to void* for %p
+    // --- Debugging Output ---
+    printf("--- Node Creation Details ---\n");
+    printf("  Node structure size: %u bytes\n", node_size);
+    printf("  Address of new Node in memory: %p\n", (void *)node);
 
-    // Link the new node to its parent.
-    parent->west = node;  // Set the parent's 'west' child pointer to the new node.
-    node->tag = TagNode;  // Set the tag of the new node to TagNode.
+    // Link the newly created node into the tree structure.
+    parent->west = node;  // Link the parent's 'west' child pointer to this new node.
+    node->tag = TagNode;  // Assign the appropriate tag to identify this as a Node.
     node->north = parent; // Set the new node's 'north' (parent) pointer.
-    node->east = NULL;    // Initialize 'east' (leaf child) to NULL.
+    node->east = NULL;    // Initialize 'east' (pointer to first Leaf) to NULL.
 
-    // Safely copy the provided path into the new node's path field.
-    // snprintf ensures that the string is null-terminated and prevents buffer overflows.
-    // Cast to (char *) for string functions as path is int8_t[].
+    // Safely copy the provided path segment into the new node's `path` field.
+    // `snprintf` is used to prevent buffer overflows by limiting the number of characters copied.
     snprintf((char *)node->path, sizeof(node->path), "%s", (char *)path);
+
+    printf("  New Node path initialized to: '%s'\n", (char *)node->path);
+    printf("-----------------------------\n");
 
     return node; // Return the pointer to the newly created node.
 }
 
-// Declare the root of the tree globally.
-// This variable will hold the top-level structure of your in-memory database.
+Leaf *find_last_linear(Node *parent)
+{
+    Leaf *current_leaf; // Iterator for traversing the leaf list.
+
+    // Pre-condition check: Ensure the parent node is valid.
+    assert(parent != NULL && "Error: Parent node cannot be NULL for find_last_linear.");
+
+    // If the parent has no 'east' leaf, the list is empty.
+    if (parent->east == NULL)
+    {
+        // Set errno to NoError (0) and return NULL, indicating no leaf was found but no error occurred.
+        // Using the reterr macro to handle error setting and return.
+        reterr(NoError);
+    }
+
+    // Start traversal from the first leaf linked to the parent.
+    current_leaf = parent->east;
+
+    // Iterate through the linked list of leaves until the last one is found.
+    // The loop continues as long as `current_leaf->east` is not NULL, meaning there's a next leaf.
+    while (current_leaf->east != NULL)
+    {
+        // Assert that the current_leaf pointer is valid before moving to the next.
+        assert(current_leaf != NULL && "Error: NULL leaf pointer encountered during linear search.");
+        current_leaf = current_leaf->east; // Move to the next leaf.
+    }
+
+    return current_leaf; // Return the last leaf found.
+}
+
+Leaf *create_leaf(Node *parent, uint8_t *key, uint16_t count, uint8_t value)
+{
+    Leaf *leaf, *new_leaf;
+    uint16_t size;
+
+    // Pre-condition check: The 'west' link (parent/sibling) must be valid.
+    assert(parent != NULL && "Error: 'parent' link cannot be NULL when creating a new leaf.");
+
+    leaf = find_last(parent);
+    size = sizeof(struct s_leaf);
+    new_leaf = (Leaf *)malloc(size);
+    assert(new_leaf);
+    if (!leaf)
+    {
+        // directly connected to the node
+        (*parent).east = new_leaf;
+    }
+    else
+    {
+        // leaf is a leaf
+        (*leaf).east = new_leaf;
+    }
+
+    zero((uint8_t *)new_leaf, size);
+    new_leaf->tag = TagLeaf;
+
+    // Set the west pointer - this needs to handle the union type properly
+    if (!leaf)
+    {
+        // First leaf points back to parent node
+        new_leaf->west = (Tree *)parent;
+    }
+    else
+    {
+        // Subsequent leaves point to previous leaf
+        // Need to cast leaf to Tree* to match the expected type
+        new_leaf->west = (Tree *)leaf;
+    }
+
+    strncpy((char *)new_leaf->key, (char *)key, 127);
+
+    new_leaf->value = (uint8_t *)malloc(count);
+    zero(new_leaf->value, count);
+    assert(new_leaf->value);
+
+    strncpy((char *)new_leaf->value, (char *)value, count);
+    new_leaf->size = count;
+
+    return leaf; // Return the pointer to the newly created leaf.
+}
+
+/**
+ * @brief The global root of the in-memory database tree.
+ *
+ * This `Tree` union variable serves as the entry point to the entire database
+ * structure. It is initialized as a `Node` and tagged as `TagRoot`.
+ */
 Tree root;
 
-// Main function, the entry point of the program.
 int main(int argc, const char *argv[])
 {
-    // Suppress unused parameter warnings for 'argc' and 'argv'.
+    // Suppress unused parameter warnings for `argc` and `argv`.
     // This is a common practice when these parameters are not used in the function body.
     (void)argc;
     (void)argv;
 
-    Node *node;                  // Pointer to hold a newly created node.
-    Node *rootAddress;           // Pointer to the Node part of the root Tree union.
-    rootAddress = (Node *)&root; // Get the address of the 'node' member within the 'root' union.
+    Node *newNode = NULL;  // Pointer to hold a newly created node.
+    Leaf *newLeaf = NULL;  // Pointer to hold a newly created leaf.
+    Node *rootNodeAddress; // Pointer to the Node part of the global `root` Tree union.
 
-    // Initialize the root Tree.
-    // The root is treated as a Node type for structural purposes.
-    root.node.north = NULL;  // The root has no parent.
-    root.node.west = NULL;   // Initially, no child nodes.
-    root.node.east = NULL;   // Initially, no child leaves.
-    root.node.tag = TagRoot; // Set the tag to indicate this is the root.
+    // Get the address of the `node` member within the `root` union.
+    rootNodeAddress = (Node *)&root;
 
-    // Initialize the path for the root node.
-    // For the root, the path is typically empty.
-    root.node.path[0] = '\0'; // Null-terminate the path string.
+    // --- Initialize the Database Root ---
+    // The `root` is treated as a `Node` type for structural purposes,
+    // serving as the top-level container for the database.
+    printf("\n--- Initializing Database Root ---\n");
+    root.node.north = NULL;   // The root has no parent.
+    root.node.west = NULL;    // Initially, no child nodes or sub-paths.
+    root.node.east = NULL;    // Initially, no child leaves directly under root.
+    root.node.tag = TagRoot;  // Set the tag to explicitly identify this as the root.
+    root.node.path[0] = '\0'; // Initialize the root's path to an empty string.
 
-    // Print initial information about the root.
-    printf("Root tag: %d\n", root.node.tag);
-    printf("Root tree address: %p\n", (void *)&root); // Cast to void* for %p
+    printf("  Root tag: %d\n", root.node.tag);
+    printf("  Root tree address: %p\n", (void *)&root);
+    printf("----------------------------------\n\n");
 
+    // --- Demonstrate Node Creation ---
+    printf("Attempting to create a new Node under the root...\n");
     // Create a new node under the root.
-    // We explicitly cast 'root.node.path' to 'int8_t *' to match the function signature
-    // and resolve any potential signedness warnings from the compiler.
-    node = create_node(rootAddress, (int8_t *)root.node.path);
+    // The path for the new node is currently an empty string (copied from root.node.path).
+    newNode = create_node(rootNodeAddress, (int8_t *)root.node.path);
 
     // Check if the node creation was successful.
-    if (node == NULL)
+    if (newNode == NULL)
     {
-        fprintf(stderr, "Error: Failed to create node.\n");
-        return 1; // Exit with an error code.
+        fprintf(stderr, "FATAL ERROR: Failed to create initial node. Exiting.\n");
+        return 1; // Exit with an error code if critical allocation fails.
     }
 
-    // Print information about the newly created node.
-    printf("Successfully created a new node under root.\n");
-    printf("New node tag: %d\n", node->tag);
-    printf("New node north (parent) address: %p\n", (void *)node->north);
-    printf("New node path: '%s'\n", (char *)node->path); // Print the path as a string
+    printf("Successfully created a new Node under root.\n\n");
 
-    // IMPORTANT: Free the memory allocated for 'node'.
-    // In a full database server, memory management would be more sophisticated,
-    // but for this example, freeing it here prevents a simple memory leak.
-    free(node);
-    node = NULL; // Set the pointer to NULL after freeing to avoid dangling pointers.
+    // --- Demonstrate Leaf Creation ---
+    printf("Attempting to create a new Leaf linked to the new Node...\n");
+    // Create a new leaf and link it to the newly created node.
+    // The 'west' parameter for create_leaf expects a Tree*, so we pass the newNode cast to Tree*.
+    // Provide a sample key and size for the leaf.
+    newLeaf = create_leaf((Node *)newNode, (uint8_t *)"sample_key", 10, 200 ); // Example key and size
 
-    return 0; // Exit successfully.
+    // Check if the leaf creation was successful.
+    if (newLeaf == NULL)
+    {
+        fprintf(stderr, "FATAL ERROR: Failed to create initial leaf. Exiting.\n");
+        // Remember to free previously allocated memory if an error occurs.
+        free(newNode);
+        newNode = NULL;
+        return 1;
+    }
+
+    printf("Successfully created a new Leaf.\n\n");
+
+    // --- Cleanup: Free Allocated Memory ---
+    // In a full database server, memory management would be more sophisticated
+    // (e.g., a garbage collector or a dedicated memory pool).
+    // For this simple example, we explicitly free the allocated nodes/leaves.
+    printf("--- Cleaning up allocated memory ---\n");
+    if (newLeaf != NULL)
+    {
+        printf("  Freeing newLeaf at %p\n", (void *)newLeaf);
+        free(newLeaf);
+        newLeaf = NULL;
+    }
+    if (newNode != NULL)
+    {
+        printf("  Freeing newNode at %p\n", (void *)newNode);
+        free(newNode);
+        newNode = NULL;
+    }
+    printf("------------------------------------\n");
+
+    return 0; // Program executed successfully.
 }
